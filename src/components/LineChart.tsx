@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import * as echarts from 'echarts';
+import { useEffect } from 'react';
+import { useECharts } from '@/hooks/useECharts';
 import type { StationAggregate } from '@/types';
 import { PEAK_HOURS } from '@/types';
 import { getLineChartOption } from '@/data/chartConfig';
@@ -12,42 +12,25 @@ interface LineChartProps {
 }
 
 export function LineChart({ station, highlightHour, onHourClick }: LineChartProps) {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const chartInstance = useRef<echarts.ECharts | null>(null);
-
-  useEffect(() => {
-    if (!chartRef.current) return;
-
-    chartInstance.current = echarts.init(chartRef.current);
-
-    const handleResize = () => {
-      chartInstance.current?.resize();
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chartInstance.current?.dispose();
-      chartInstance.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!chartInstance.current) return;
-
-    const option = getLineChartOption(station, highlightHour);
-    chartInstance.current.setOption(option, true);
-
-    chartInstance.current.off('click');
-    chartInstance.current.on('click', (params) => {
-      if (params.componentType === 'series' && typeof params.dataIndex === 'number') {
-        const hour = PEAK_HOURS[params.dataIndex];
-        if (hour !== undefined) {
-          onHourClick(hour);
-        }
+  const handleClick = (params: unknown) => {
+    const p = params as { componentType?: unknown; dataIndex?: unknown };
+    if (p.componentType === 'series' && typeof p.dataIndex === 'number') {
+      const hour = PEAK_HOURS[p.dataIndex];
+      if (hour !== undefined) {
+        onHourClick(hour);
       }
-    });
-  }, [station, highlightHour, onHourClick]);
+    }
+  };
+
+  const { chartRef, setOption } = useECharts({
+    minHeight: '280px',
+    onClick: handleClick,
+  });
+
+  useEffect(() => {
+    const option = getLineChartOption(station, highlightHour);
+    setOption(option);
+  }, [station, highlightHour, setOption]);
 
   return (
     <div className="h-full w-full">

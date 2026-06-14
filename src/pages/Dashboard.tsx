@@ -1,5 +1,6 @@
-import { useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useDashboardStore, type SelectedHour } from '@/store/useDashboardStore';
+import { useDashboardView } from '@/data/dashboardView';
 import { getStationByName } from '@/data/dataAggregator';
 import { DashboardHeader } from '@/components/DashboardHeader';
 import { BarChart } from '@/components/BarChart';
@@ -21,6 +22,8 @@ export default function Dashboard() {
     setSelectedHour,
   } = useDashboardStore();
 
+  const view = useDashboardView(stations, selectedHour);
+
   useEffect(() => {
     loadData(CSV_URL);
   }, [loadData]);
@@ -39,20 +42,13 @@ export default function Dashboard() {
     [setSelectedHour],
   );
 
-  const selectedStationData = useMemo(
-    () => (selectedStation ? getStationByName(stations, selectedStation) || null : null),
-    [stations, selectedStation],
-  );
+  const selectedStationData = selectedStation
+    ? getStationByName(stations, selectedStation) || null
+    : null;
 
-  const highRiskCount = useMemo(() => {
-    if (selectedHour === 'all') {
-      return stations.filter((s) => s.maxHourlyNetFlow >= 80).length;
-    }
-    return stations.filter((s) => {
-      const hourly = s.hourlyData.find((h) => h.hour === selectedHour);
-      return (hourly?.netFlow ?? 0) >= 80;
-    }).length;
-  }, [stations, selectedHour]);
+  const selectedStationView = selectedStation
+    ? view.getStationView(selectedStation) || null
+    : null;
 
   if (loading) {
     return (
@@ -84,7 +80,7 @@ export default function Dashboard() {
       <div className="max-w-[1600px] mx-auto">
         <DashboardHeader
           totalStations={stations.length}
-          highRiskCount={highRiskCount}
+          highRiskCount={view.highRiskCount}
           selectedHour={selectedHour}
           onHourChange={handleHourChange}
         />
@@ -103,7 +99,7 @@ export default function Dashboard() {
             </div>
             <div className="h-[500px]">
               <BarChart
-                stations={stations}
+                rankedStations={view.rankedStations}
                 selectedStation={selectedStation}
                 selectedHour={selectedHour}
                 onStationClick={handleStationClick}
@@ -134,7 +130,7 @@ export default function Dashboard() {
                   onHourClick={handleHourChange}
                 />
               </div>
-              {selectedStationData && (
+              {selectedStationData && selectedStationView && (
                 <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-slate-700/50">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-green-400 font-mono">
@@ -150,10 +146,7 @@ export default function Dashboard() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-cyan-400 font-mono">
-                      {selectedHour === 'all'
-                        ? selectedStationData.totalNetFlow
-                        : (selectedStationData.hourlyData.find((h) => h.hour === selectedHour)
-                            ?.netFlow ?? 0)}
+                      {view.getHourlyNetFlow(selectedStationView, selectedHour)}
                     </div>
                     <div className="text-xs text-slate-500 mt-1">
                       {selectedHour === 'all' ? '累计净客流' : `${selectedHour}点净客流`}
@@ -165,7 +158,7 @@ export default function Dashboard() {
 
             <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-5 shadow-xl flex-1">
               <RiskTable
-                stations={stations}
+                highRiskStations={view.highRiskStations}
                 selectedStation={selectedStation}
                 selectedHour={selectedHour}
                 onStationClick={handleStationClick}

@@ -1,63 +1,38 @@
-import { useRef, useEffect } from 'react';
-import * as echarts from 'echarts';
+import { useEffect } from 'react';
+import { useECharts } from '@/hooks/useECharts';
+import type { StationViewItem } from '@/data/dashboardView';
 import type { SelectedHour } from '@/store/useDashboardStore';
-import {
-  getBarChartOption,
-  buildBarChartDisplayData,
-  type BarChartDisplayItem,
-} from '@/data/chartConfig';
-import type { StationAggregate } from '@/types';
+import { getBarChartOption } from '@/data/chartConfig';
 
 interface BarChartProps {
-  stations: StationAggregate[];
+  rankedStations: StationViewItem[];
   selectedStation: string | null;
   selectedHour: SelectedHour;
   onStationClick: (stationName: string) => void;
 }
 
 export function BarChart({
-  stations,
+  rankedStations,
   selectedStation,
   selectedHour,
   onStationClick,
 }: BarChartProps) {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const chartInstance = useRef<echarts.ECharts | null>(null);
-  const displayDataRef = useRef<BarChartDisplayItem[]>([]);
+  const handleClick = (params: unknown) => {
+    const p = params as { name?: unknown };
+    if (p.name && typeof p.name === 'string') {
+      onStationClick(p.name);
+    }
+  };
+
+  const { chartRef, setOption } = useECharts({
+    minHeight: '400px',
+    onClick: handleClick,
+  });
 
   useEffect(() => {
-    if (!chartRef.current) return;
-
-    chartInstance.current = echarts.init(chartRef.current);
-
-    const handleResize = () => {
-      chartInstance.current?.resize();
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chartInstance.current?.dispose();
-      chartInstance.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!chartInstance.current) return;
-
-    const displayData = buildBarChartDisplayData(stations, selectedHour);
-    displayDataRef.current = displayData;
-
-    const option = getBarChartOption(displayData, selectedStation, selectedHour);
-    chartInstance.current.setOption(option, true);
-
-    chartInstance.current.off('click');
-    chartInstance.current.on('click', (params) => {
-      if (params.name && typeof params.name === 'string') {
-        onStationClick(params.name);
-      }
-    });
-  }, [stations, selectedStation, selectedHour, onStationClick]);
+    const option = getBarChartOption(rankedStations, selectedStation, selectedHour);
+    setOption(option);
+  }, [rankedStations, selectedStation, selectedHour, setOption]);
 
   return (
     <div className="h-full w-full">

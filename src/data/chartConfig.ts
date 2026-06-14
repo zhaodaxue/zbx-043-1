@@ -1,87 +1,32 @@
 import type { EChartsOption } from 'echarts';
 import type { StationAggregate } from '@/types';
-import { PEAK_HOURS } from '@/types';
+import type { StationViewItem } from '@/data/dashboardView';
 import type { SelectedHour } from '@/store/useDashboardStore';
 
 const COLORS = {
   primary: '#06b6d4',
   warning: '#f97316',
-  danger: '#ef4444',
-  success: '#22c55e',
   warningYellow: '#eab308',
   lightBlue: '#38bdf8',
   textPrimary: '#f1f5f9',
   textSecondary: '#94a3b8',
-  bgCard: '#1e293b',
   splitLine: '#334155',
 };
 
-export interface BarChartDisplayItem {
-  stationName: string;
-  displayValue: number;
-  totalNetFlow: number;
-  totalBoarding: number;
-  totalAlighting: number;
-  riskLevel: 'high' | 'medium' | 'low';
-  isHighRiskCurrent: boolean;
-}
-
-export const buildBarChartDisplayData = (
-  stations: StationAggregate[],
-  selectedHour: SelectedHour,
-): BarChartDisplayItem[] => {
-  const items: BarChartDisplayItem[] = stations.map((s) => {
-    if (selectedHour === 'all') {
-      return {
-        stationName: s.stationName,
-        displayValue: s.totalNetFlow,
-        totalNetFlow: s.totalNetFlow,
-        totalBoarding: s.totalBoarding,
-        totalAlighting: s.totalAlighting,
-        riskLevel: s.riskLevel,
-        isHighRiskCurrent: s.maxHourlyNetFlow >= 80,
-      };
-    }
-
-    const hourlyItem = s.hourlyData.find((h) => h.hour === selectedHour);
-    const hourlyNetFlow = hourlyItem?.netFlow ?? 0;
-    const hourlyBoardingRecord = null;
-    void hourlyBoardingRecord;
-
-    return {
-      stationName: s.stationName,
-      displayValue: hourlyNetFlow,
-      totalNetFlow: s.totalNetFlow,
-      totalBoarding: s.totalBoarding,
-      totalAlighting: s.totalAlighting,
-      riskLevel: s.riskLevel,
-      isHighRiskCurrent: hourlyNetFlow >= 80,
-    };
-  });
-
-  return items.sort((a, b) => b.displayValue - a.displayValue);
-};
-
 export const getBarChartOption = (
-  displayItems: BarChartDisplayItem[],
+  rankedStations: StationViewItem[],
   selectedStation: string | null,
   selectedHour: SelectedHour,
 ): EChartsOption => {
-  const reversed = [...displayItems].reverse();
+  const reversed = [...rankedStations].reverse();
   const stationNames = reversed.map((s) => s.stationName);
-  const values = reversed.map((s) => s.displayValue);
+  const values = reversed.map((s) => s.rankingValue);
 
   const barColors = reversed.map((s) => {
     if (selectedStation && s.stationName === selectedStation) {
       return COLORS.primary;
     }
-    if (s.isHighRiskCurrent) return COLORS.warning;
-    if (selectedHour === 'all') {
-      if (s.riskLevel === 'medium') return COLORS.warningYellow;
-    } else {
-      if (s.displayValue >= 50) return COLORS.warningYellow;
-    }
-    return COLORS.lightBlue;
+    return s.barColor;
   });
 
   const valueLabel = selectedHour === 'all' ? '累计净客流' : '净客流';
@@ -99,13 +44,13 @@ export const getBarChartOption = (
         const dataIndex = p?.dataIndex;
         const item = reversed[dataIndex];
         if (!item) return '';
-        const riskTag = item.isHighRiskCurrent
+        const riskTag = item.isHighRisk
           ? '<span style="color: #f97316; font-weight: 600;">⚠ 高风险</span>'
           : '';
         return `
           <div style="padding: 4px 0; min-width: 160px;">
             <div style="font-weight: 600; margin-bottom: 6px;">${item.stationName} ${riskTag}</div>
-            <div>${valueLabel}: <span style="color: ${item.isHighRiskCurrent ? '#f97316' : '#06b6d4'}; font-weight: 600;">${item.displayValue}</span> 人</div>
+            <div>${valueLabel}: <span style="color: ${item.isHighRisk ? '#f97316' : '#06b6d4'}; font-weight: 600;">${item.rankingValue}</span> 人</div>
             <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">
               累计: 上${item.totalBoarding} / 下${item.totalAlighting} / 净${item.totalNetFlow}
             </div>
@@ -168,13 +113,14 @@ export const getLineChartOption = (
   station: StationAggregate | null,
   highlightHour: SelectedHour,
 ): EChartsOption => {
-  const hours = PEAK_HOURS.map((h) => `${h}:00`);
+  const hoursLabels = ['6:00', '7:00', '8:00', '9:00'];
   const netFlowData = station?.hourlyData.map((h) => h.netFlow) || [];
+  const peakHours = [6, 7, 8, 9];
 
   const highlightIndex =
     highlightHour === 'all'
       ? -1
-      : PEAK_HOURS.findIndex((h) => h === highlightHour);
+      : peakHours.findIndex((h) => h === highlightHour);
 
   const symbolSizes = netFlowData.map((_, i) =>
     i === highlightIndex ? 16 : 8,
@@ -221,7 +167,7 @@ export const getLineChartOption = (
     },
     xAxis: {
       type: 'category',
-      data: hours,
+      data: hoursLabels,
       boundaryGap: false,
       axisLine: { lineStyle: { color: COLORS.splitLine } },
       axisTick: { show: false },
