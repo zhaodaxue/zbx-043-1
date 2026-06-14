@@ -1,17 +1,29 @@
 import { useRef, useEffect } from 'react';
 import * as echarts from 'echarts';
+import type { SelectedHour } from '@/store/useDashboardStore';
+import {
+  getBarChartOption,
+  buildBarChartDisplayData,
+  type BarChartDisplayItem,
+} from '@/data/chartConfig';
 import type { StationAggregate } from '@/types';
-import { getBarChartOption } from '@/data/chartConfig';
 
 interface BarChartProps {
   stations: StationAggregate[];
   selectedStation: string | null;
+  selectedHour: SelectedHour;
   onStationClick: (stationName: string) => void;
 }
 
-export function BarChart({ stations, selectedStation, onStationClick }: BarChartProps) {
+export function BarChart({
+  stations,
+  selectedStation,
+  selectedHour,
+  onStationClick,
+}: BarChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
+  const displayDataRef = useRef<BarChartDisplayItem[]>([]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -33,7 +45,10 @@ export function BarChart({ stations, selectedStation, onStationClick }: BarChart
   useEffect(() => {
     if (!chartInstance.current) return;
 
-    const option = getBarChartOption(stations, selectedStation);
+    const displayData = buildBarChartDisplayData(stations, selectedHour);
+    displayDataRef.current = displayData;
+
+    const option = getBarChartOption(displayData, selectedStation, selectedHour);
     chartInstance.current.setOption(option, true);
 
     chartInstance.current.off('click');
@@ -42,7 +57,7 @@ export function BarChart({ stations, selectedStation, onStationClick }: BarChart
         onStationClick(params.name);
       }
     });
-  }, [stations, selectedStation, onStationClick]);
+  }, [stations, selectedStation, selectedHour, onStationClick]);
 
   return (
     <div className="h-full w-full">

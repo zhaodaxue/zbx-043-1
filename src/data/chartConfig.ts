@@ -1,33 +1,90 @@
 import type { EChartsOption } from 'echarts';
 import type { StationAggregate } from '@/types';
 import { PEAK_HOURS } from '@/types';
+import type { SelectedHour } from '@/store/useDashboardStore';
 
 const COLORS = {
   primary: '#06b6d4',
   warning: '#f97316',
   danger: '#ef4444',
   success: '#22c55e',
+  warningYellow: '#eab308',
+  lightBlue: '#38bdf8',
   textPrimary: '#f1f5f9',
   textSecondary: '#94a3b8',
   bgCard: '#1e293b',
   splitLine: '#334155',
 };
 
-export const getBarChartOption = (
-  stations: StationAggregate[],
-  selectedStation: string | null,
-): EChartsOption => {
-  const stationNames = stations.map((s) => s.stationName).reverse();
-  const netFlowValues = stations.map((s) => s.totalNetFlow).reverse();
+export interface BarChartDisplayItem {
+  stationName: string;
+  displayValue: number;
+  totalNetFlow: number;
+  totalBoarding: number;
+  totalAlighting: number;
+  riskLevel: 'high' | 'medium' | 'low';
+  isHighRiskCurrent: boolean;
+}
 
-  const barColors = stations.map((s) => {
-    if (selectedStation && s.stationName === selectedStation) {
-      return '#06b6d4';
+export const buildBarChartDisplayData = (
+  stations: StationAggregate[],
+  selectedHour: SelectedHour,
+): BarChartDisplayItem[] => {
+  const items: BarChartDisplayItem[] = stations.map((s) => {
+    if (selectedHour === 'all') {
+      return {
+        stationName: s.stationName,
+        displayValue: s.totalNetFlow,
+        totalNetFlow: s.totalNetFlow,
+        totalBoarding: s.totalBoarding,
+        totalAlighting: s.totalAlighting,
+        riskLevel: s.riskLevel,
+        isHighRiskCurrent: s.maxHourlyNetFlow >= 80,
+      };
     }
-    if (s.maxHourlyNetFlow >= 80) return '#f97316';
-    if (s.maxHourlyNetFlow >= 50) return '#eab308';
-    return '#38bdf8';
-  }).reverse();
+
+    const hourlyItem = s.hourlyData.find((h) => h.hour === selectedHour);
+    const hourlyNetFlow = hourlyItem?.netFlow ?? 0;
+    const hourlyBoardingRecord = null;
+    void hourlyBoardingRecord;
+
+    return {
+      stationName: s.stationName,
+      displayValue: hourlyNetFlow,
+      totalNetFlow: s.totalNetFlow,
+      totalBoarding: s.totalBoarding,
+      totalAlighting: s.totalAlighting,
+      riskLevel: s.riskLevel,
+      isHighRiskCurrent: hourlyNetFlow >= 80,
+    };
+  });
+
+  return items.sort((a, b) => b.displayValue - a.displayValue);
+};
+
+export const getBarChartOption = (
+  displayItems: BarChartDisplayItem[],
+  selectedStation: string | null,
+  selectedHour: SelectedHour,
+): EChartsOption => {
+  const reversed = [...displayItems].reverse();
+  const stationNames = reversed.map((s) => s.stationName);
+  const values = reversed.map((s) => s.displayValue);
+
+  const barColors = reversed.map((s) => {
+    if (selectedStation && s.stationName === selectedStation) {
+      return COLORS.primary;
+    }
+    if (s.isHighRiskCurrent) return COLORS.warning;
+    if (selectedHour === 'all') {
+      if (s.riskLevel === 'medium') return COLORS.warningYellow;
+    } else {
+      if (s.displayValue >= 50) return COLORS.warningYellow;
+    }
+    return COLORS.lightBlue;
+  });
+
+  const valueLabel = selectedHour === 'all' ? '累计净客流' : '净客流';
 
   return {
     backgroundColor: 'transparent',
@@ -40,13 +97,18 @@ export const getBarChartOption = (
       formatter: (params: unknown) => {
         const p = Array.isArray(params) ? params[0] : params;
         const dataIndex = p?.dataIndex;
-        const station = stations[stations.length - 1 - dataIndex];
-        if (!station) return '';
+        const item = reversed[dataIndex];
+        if (!item) return '';
+        const riskTag = item.isHighRiskCurrent
+          ? '<span style="color: #f97316; font-weight: 600;">⚠ 高风险</span>'
+          : '';
         return `
-          <div style="padding: 4px 0;">
-            <div style="font-weight: 600; margin-bottom: 4px;">${station.stationName}</div>
-            <div>净客流: <span style="color: ${station.maxHourlyNetFlow >= 80 ? '#f97316' : '#06b6d4'}; font-weight: 600;">${station.totalNetFlow}</span> 人</div>
-            <div style="color: #94a3b8; font-size: 12px;">上车 ${station.totalBoarding} / 下车 ${station.totalAlighting}</div>
+          <div style="padding: 4px 0; min-width: 160px;">
+            <div style="font-weight: 600; margin-bottom: 6px;">${item.stationName} ${riskTag}</div>
+            <div>${valueLabel}: <span style="color: ${item.isHighRiskCurrent ? '#f97316' : '#06b6d4'}; font-weight: 600;">${item.displayValue}</span> 人</div>
+            <div style="color: #94a3b8; font-size: 12px; margin-top: 4px;">
+              累计: 上${item.totalBoarding} / 下${item.totalAlighting} / 净${item.totalNetFlow}
+            </div>
           </div>
         `;
       },
@@ -79,13 +141,13 @@ export const getBarChartOption = (
     series: [
       {
         type: 'bar',
-        data: netFlowValues.map((value, index) => ({
-        value,
-        itemStyle: {
-          color: barColors[index],
-          borderRadius: [0, 4, 4, 0],
-        },
-      })),
+        data: values.map((value, index) => ({
+          value,
+          itemStyle: {
+            color: barColors[index],
+            borderRadius: [0, 4, 4, 0],
+          },
+        })),
         barWidth: 16,
         label: {
           show: true,
@@ -102,9 +164,28 @@ export const getBarChartOption = (
   };
 };
 
-export const getLineChartOption = (station: StationAggregate | null): EChartsOption => {
+export const getLineChartOption = (
+  station: StationAggregate | null,
+  highlightHour: SelectedHour,
+): EChartsOption => {
   const hours = PEAK_HOURS.map((h) => `${h}:00`);
   const netFlowData = station?.hourlyData.map((h) => h.netFlow) || [];
+
+  const highlightIndex =
+    highlightHour === 'all'
+      ? -1
+      : PEAK_HOURS.findIndex((h) => h === highlightHour);
+
+  const symbolSizes = netFlowData.map((_, i) =>
+    i === highlightIndex ? 16 : 8,
+  );
+  const itemStyles = netFlowData.map((_, i) => ({
+    color: i === highlightIndex ? '#f97316' : '#06b6d4',
+    borderColor: i === highlightIndex ? '#fef3c7' : '#0f172a',
+    borderWidth: i === highlightIndex ? 4 : 2,
+    shadowColor: i === highlightIndex ? 'rgba(249, 115, 22, 0.6)' : 'transparent',
+    shadowBlur: i === highlightIndex ? 16 : 0,
+  }));
 
   return {
     backgroundColor: 'transparent',
@@ -117,10 +198,16 @@ export const getLineChartOption = (station: StationAggregate | null): EChartsOpt
         const p = Array.isArray(params) ? params[0] : params;
         if (!p) return '';
         const value = p.value;
+        const hourIdx = p.dataIndex;
+        const isHighRisk = value >= 80;
+        const isSelected = hourIdx === highlightIndex;
         return `
           <div style="padding: 4px 0;">
-            <div style="margin-bottom: 4px;">${p.name}</div>
-            <div>净客流: <span style="color: #06b6d4; font-weight: 600;">${value}</span> 人</div>
+            <div style="margin-bottom: 4px;">
+              ${p.name} ${isSelected ? '<span style="color:#f97316">(当前选中)</span>' : ''}
+            </div>
+            <div>净客流: <span style="color: ${isHighRisk ? '#f97316' : '#06b6d4'}; font-weight: 600;">${value}</span> 人</div>
+            ${isHighRisk ? '<div style="color:#f97316; font-size:11px; margin-top:2px;">⚠ 本时段高风险</div>' : ''}
           </div>
         `;
       },
@@ -138,7 +225,10 @@ export const getLineChartOption = (station: StationAggregate | null): EChartsOpt
       boundaryGap: false,
       axisLine: { lineStyle: { color: COLORS.splitLine } },
       axisTick: { show: false },
-      axisLabel: { color: COLORS.textSecondary },
+      axisLabel: {
+        color: (idx: number) =>
+          idx === highlightIndex ? '#f97316' : COLORS.textSecondary,
+      },
     },
     yAxis: {
       type: 'value',
@@ -147,38 +237,63 @@ export const getLineChartOption = (station: StationAggregate | null): EChartsOpt
       axisLabel: { color: COLORS.textSecondary },
       splitLine: { lineStyle: { color: COLORS.splitLine, type: 'dashed' } },
     },
-    series: station ? [
-      {
-        type: 'line',
-        data: netFlowData,
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 8,
-        lineStyle: {
-          width: 3,
-          color: '#06b6d4',
-          shadowColor: 'rgba(6, 182, 212, 0.4)',
-          shadowBlur: 10,
-        },
-        itemStyle: {
-          color: '#06b6d4',
-          borderColor: '#0f172a',
-          borderWidth: 2,
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(6, 182, 212, 0.3)' },
-              { offset: 1, color: 'rgba(6, 182, 212, 0)' },
-            ],
+    series: station
+      ? [
+          {
+            type: 'line',
+            data: netFlowData.map((val, idx) => ({
+              value: val,
+              symbolSize: symbolSizes[idx],
+              itemStyle: itemStyles[idx],
+            })),
+            smooth: true,
+            symbol: 'circle',
+            lineStyle: {
+              width: 3,
+              color: '#06b6d4',
+              shadowColor: 'rgba(6, 182, 212, 0.4)',
+              shadowBlur: 10,
+            },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(6, 182, 212, 0.3)' },
+                  { offset: 1, color: 'rgba(6, 182, 212, 0)' },
+                ],
+              },
+            },
+            animationDuration: 1500,
+            animationEasing: 'cubicOut',
           },
-        },
-        animationDuration: 1500,
-        animationEasing: 'cubicOut',
-      },
-    ] : [],
+          ...(highlightIndex !== -1
+            ? [
+                {
+                  type: 'line',
+                  data: netFlowData.map((_, idx) =>
+                    idx === highlightIndex ? netFlowData[idx] : null,
+                  ),
+                  smooth: false,
+                  symbol: 'circle',
+                  symbolSize: 20,
+                  itemStyle: {
+                    color: 'transparent',
+                    borderColor: '#f97316',
+                    borderWidth: 2,
+                  },
+                  lineStyle: { opacity: 0 },
+                  tooltip: { show: false },
+                  silent: true,
+                  z: 10,
+                } as const,
+              ]
+            : []),
+        ]
+      : [],
   };
 };
 
