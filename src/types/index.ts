@@ -16,6 +16,7 @@ export interface StationAggregate {
   totalBoarding: number;
   totalAlighting: number;
   totalNetFlow: number;
+  maxHourlyNetFlow: number;
   hourlyData: HourlyNetFlow[];
   riskLevel: 'high' | 'medium' | 'low';
 }

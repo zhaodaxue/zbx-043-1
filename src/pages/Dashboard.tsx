@@ -24,7 +24,7 @@ export default function Dashboard() {
     ? getStationByName(stations, selectedStation) || null
     : null;
 
-  const highRiskCount = stations.filter((s) => s.totalNetFlow >= 80).length;
+  const highRiskCount = stations.filter((s) => s.maxHourlyNetFlow >= 80).length;
 
   if (loading) {
     return (

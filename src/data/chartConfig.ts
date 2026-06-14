@@ -24,8 +24,8 @@ export const getBarChartOption = (
     if (selectedStation && s.stationName === selectedStation) {
       return '#06b6d4';
     }
-    if (s.totalNetFlow >= 80) return '#f97316';
-    if (s.totalNetFlow >= 50) return '#eab308';
+    if (s.maxHourlyNetFlow >= 80) return '#f97316';
+    if (s.maxHourlyNetFlow >= 50) return '#eab308';
     return '#38bdf8';
   }).reverse();
 
@@ -45,7 +45,7 @@ export const getBarChartOption = (
         return `
           <div style="padding: 4px 0;">
             <div style="font-weight: 600; margin-bottom: 4px;">${station.stationName}</div>
-            <div>净客流: <span style="color: ${station.totalNetFlow >= 80 ? '#f97316' : '#06b6d4'}; font-weight: 600;">${station.totalNetFlow}</span> 人</div>
+            <div>净客流: <span style="color: ${station.maxHourlyNetFlow >= 80 ? '#f97316' : '#06b6d4'}; font-weight: 600;">${station.totalNetFlow}</span> 人</div>
             <div style="color: #94a3b8; font-size: 12px;">上车 ${station.totalBoarding} / 下车 ${station.totalAlighting}</div>
           </div>
         `;

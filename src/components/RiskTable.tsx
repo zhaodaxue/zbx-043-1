@@ -14,7 +14,9 @@ const riskLevelConfig = {
 };
 
 export function RiskTable({ stations, selectedStation, onStationClick }: RiskTableProps) {
-  const highRiskStations = stations.filter((s) => s.totalNetFlow >= 80);
+  const highRiskStations = stations
+    .filter((s) => s.maxHourlyNetFlow >= 80)
+    .sort((a, b) => b.maxHourlyNetFlow - a.maxHourlyNetFlow);
 
   return (
     <div className="h-full flex flex-col">
@@ -32,7 +34,7 @@ export function RiskTable({ stations, selectedStation, onStationClick }: RiskTab
             <tr className="text-slate-400 text-left">
               <th className="py-3 px-2 font-medium">排名</th>
               <th className="py-3 px-2 font-medium">站点名称</th>
-              <th className="py-3 px-2 font-medium text-right">净客流</th>
+              <th className="py-3 px-2 font-medium text-right">峰值净客流</th>
               <th className="py-3 px-2 font-medium text-right">风险等级</th>
             </tr>
           </thead>
@@ -68,7 +70,7 @@ export function RiskTable({ stations, selectedStation, onStationClick }: RiskTab
                   </td>
                   <td className="py-3 px-2 text-right">
                     <span className="text-orange-400 font-mono font-semibold">
-                      {station.totalNetFlow}
+                      {station.maxHourlyNetFlow}
                     </span>
                   </td>
                   <td className="py-3 px-2 text-right">
@@ -91,7 +93,7 @@ export function RiskTable({ stations, selectedStation, onStationClick }: RiskTab
       </div>
 
       <div className="mt-3 pt-3 border-t border-slate-700/50 text-xs text-slate-500">
-        * 净客流 ≥ 80 人判定为高风险站点
+        * 单小时净客流 ≥ 80 人判定为高风险站点
       </div>
     </div>
   );
